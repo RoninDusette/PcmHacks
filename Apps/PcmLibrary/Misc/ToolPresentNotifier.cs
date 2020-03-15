@@ -6,20 +6,45 @@ using System.Threading.Tasks;
 
 namespace PcmHacking
 {
+    /// <summary>
+    /// Send VPW "tool present" messages to keep the PCM in a state receptive to reading and writing.
+    /// </summary>
     public class ToolPresentNotifier
     {
+        /// <summary>
+        /// Provides access to the Results and Debug panes.
+        /// </summary>
         ILogger logger;
-        MessageFactory messageFactory;
+
+        /// <summary>
+        /// Generates VPW messages.
+        /// </summary>
+        Protocol protocol;
+
+        /// <summary>
+        /// The device to send messages with.
+        /// </summary>
         Device device;
+
+        /// <summary>
+        /// When the last message was sent.
+        /// </summary>
         DateTime lastNotificationTime = DateTime.MinValue;
 
-        public ToolPresentNotifier(ILogger logger, MessageFactory messageFactory, Device device)
+        /// <summary>
+        /// Constructor.
+        /// </summary>
+        public ToolPresentNotifier(Device device, Protocol protocol, ILogger logger)
         {
             this.logger = logger;
-            this.messageFactory = messageFactory;
+            this.protocol = protocol;
             this.device = device;
         }
 
+        /// <summary>
+        /// Send a tool-present message, if the time is right.
+        /// </summary>
+        /// <returns></returns>
         public async Task Notify()
         {
             // Tool present / 3F is required every 2.5 seconds.
@@ -36,10 +61,22 @@ namespace PcmHacking
             }
         }
 
+        /// <summary>
+        /// Send a tool-present message, even if not much time has passed. This is to aid in polling.
+        /// </summary>
+        /// <returns></returns>
+        public async Task ForceNotify()
+        {
+            await this.SendNotification();
+        }
+
+        /// <summary>
+        /// Send a tool-present message.
+        /// </summary>
         private async Task SendNotification()
         {
             this.logger.AddDebugMessage("Sending 'test device present' notification.");
-            Message message = this.messageFactory.CreateTestDevicePresent();
+            Message message = this.protocol.CreateTestDevicePresentNotification();
             await this.device.SendMessage(message);
         }
     }

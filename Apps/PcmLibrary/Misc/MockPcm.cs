@@ -48,6 +48,7 @@ namespace PcmHacking
         {
             this.crc = 0xFF;
             this.state = 0;
+            this.payload.Clear();
         }
 
         /// <summary>
@@ -143,7 +144,7 @@ namespace PcmHacking
                 {
                     // TODO: validate the key.
                     // For now we'll just return a 'success' response every time.
-                    this.responseBuffer = new byte[] { 0x6C, 0xF0, 0x10, 0x67, 0x02, 0x34, 0x4B };
+                    this.responseBuffer = new byte[] { 0x6C, 0xF0, 0x10, 0x67, 0x02, 0x34 };
                 }
             }
             else if (this.modeByte == 0x3C)
@@ -234,7 +235,9 @@ namespace PcmHacking
             return result;
         }
 
-
+        /// <summary>
+        /// Interpret the first byte of a VPW message.
+        /// </summary>
         private void ParseFirstByte(byte value)
         {
             byte priority = (byte)((value & 0xE0) >> 5);
@@ -246,6 +249,9 @@ namespace PcmHacking
             this.header = "Pri" + priority.ToString() + " " + header + " " + inFrameResponse + " " + addressMode;
         }
 
+        /// <summary>
+        /// Check the CRC byte at the end of a VPW message.
+        /// </summary>
         public bool CheckCrc(byte value)
         {
             if (this.GetCrc() == value)
@@ -260,6 +266,9 @@ namespace PcmHacking
             }
         }
 
+        /// <summary>
+        /// Compute the CRC of a series of bytes (use by invoking repeatedly).
+        /// </summary>
         private void Crc(byte value)
         {
             crc ^= value;
@@ -278,11 +287,17 @@ namespace PcmHacking
             }
         }
 
+        /// <summary>
+        /// Get the CRC value computed by repeated invocations of the Crc() method above.
+        /// </summary>
         private byte GetCrc()
         {
             return (byte)((~this.crc) & 0xFF);
         }
 
+        /// <summary>
+        /// Interpret the device-id byte of a VPW message.
+        /// </summary>
         private string ParseDevice(byte value)
         {
             if (value < 0x20)
@@ -393,6 +408,9 @@ namespace PcmHacking
             }
         }
 
+        /// <summary>
+        /// Interpret the 'mode' byte of a functional VPW message.
+        /// </summary>
         private string GetFunctionalMode(byte mode)
         {
             switch (mode)
@@ -410,6 +428,9 @@ namespace PcmHacking
             }
         }
 
+        /// <summary>
+        /// Interpret the 'mode' byte of a physical VPW message.
+        /// </summary>
         private string GetPhysicalMode(byte mode)
         {
             switch (mode)
@@ -519,6 +540,9 @@ namespace PcmHacking
             }
         }
 
+        /// <summary>
+        /// Convert an unsigned 4-byte value to a byte array.
+        /// </summary>
         private byte[] UnsignedToByteArray(uint value)
         {
             byte[] native = BitConverter.GetBytes(value);
@@ -530,6 +554,4 @@ namespace PcmHacking
             return result;
         }
     }
-
-
 }

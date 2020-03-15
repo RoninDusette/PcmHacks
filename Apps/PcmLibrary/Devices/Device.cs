@@ -4,18 +4,38 @@ using System.Threading.Tasks;
 
 namespace PcmHacking
 {
+    /// <summary>
+    /// What the code was doing when a timeout happened.
+    /// </summary>
     public enum TimeoutScenario
     {
         Undefined = 0,
         ReadProperty,
+        ReadCrc,
         SendKernel,
         ReadMemoryBlock,
+        Maximum,
     }
 
+    /// <summary>
+    /// VPW can operate at two speeds. It is generally in standard (low speed) mode, but can switch to 4X (high speed).
+    /// </summary>
+    /// <remarks>
+    /// High speed is better whend reading the entire contents of the PCM.
+    /// Transitions to high speed must be negotiated, and any module that doesn't
+    /// want to switch can force the bus to stay at standard speed. Annoying.
+    /// </remarks>
     public enum VpwSpeed
     {
-        Standard, // 10.4 kbps
-        FourX, // 41.2 kbps
+        /// <summary>
+        /// 10.4 kpbs. This is the standard VPW speed.
+        /// </summary>
+        Standard,
+
+        /// <summary>
+        /// 41.2 kbps. This is the high VPW speed.
+        /// </summary>
+        FourX,
     }
 
     /// <summary>
@@ -27,14 +47,47 @@ namespace PcmHacking
     /// </summary>
     public abstract class Device : IDisposable
     {
+        private int maxSendSize;
+
+        /// <summary>
+        /// Provides access to the Results and Debug panes.
+        /// </summary>
         protected ILogger Logger { get; private set; }
 
-        public int MaxSendSize { get; protected set; }
+        /// <summary>
+        /// Maximum size of sent messages.
+        /// </summary>
+        /// <remarks>
+        /// Max send size is currently limited to 2k, because the kernel
+        /// crashes at startup with a 4k buffer.
+        /// TODO: Make the kernel happy with a 4k buffer, remove this limit.
+        /// </remarks>
+        public int MaxSendSize
+        {
+            get
+            {
+                return Math.Min(2048+12, this.maxSendSize);
+            }
 
+            protected set
+            {
+                this.maxSendSize = value;
+            }
+        }
+
+        /// <summary>
+        /// Maximum size of received messages.
+        /// </summary>
         public int MaxReceiveSize { get; protected set; }
 
+        /// <summary>
+        /// Indicates whether or not the device supports 4X speed.
+        /// </summary>
         public bool Supports4X { get; protected set; }
 
+        /// <summary>
+        /// Number of messages recevied so far.
+        /// </summary>
         public int ReceivedMessageCount { get { return this.queue.Count; } }
 
         /// <summary>
@@ -94,13 +147,14 @@ namespace PcmHacking
         public abstract Task<bool> SendMessage(Message message);
 
         /// <summary>
-        /// Removes any messages that might be waiting in the incoming-message queue.
+        /// Removes any messages that might be waiting in the incoming-message queue. Also clears the buffer.
         /// </summary>
         public void ClearMessageQueue()
         {
             this.queue.Clear();
             ClearMessageBuffer();
         }
+
         /// <summary>
         /// Clears Serial port buffer or J2534 api buffer
         /// </summary>
@@ -186,7 +240,14 @@ namespace PcmHacking
             {
                 case TimeoutScenario.ReadProperty:
                     // Approximate number of bytes in a get-VIN or get-OSID response.
-                    packetSize = 20;
+                    packetSize = 50;
+                    break;
+
+                case TimeoutScenario.ReadCrc:
+                    // These packets are actually only 15 bytes, but the ReadProperty timeout wasn't
+                    // enough for the AllPro at 4x. Still not sure why. So this is a bit of a hack.
+                    // TODO: Figure out why the AllPro needs a hack to receive CRC values at 4x.
+                    packetSize = 1000;
                     break;
 
                 case TimeoutScenario.ReadMemoryBlock:
@@ -196,12 +257,15 @@ namespace PcmHacking
 
                     // Not sure why this is necessary, but AllPro 2k reads won't work without it.
                     //packetSize = (int) (packetSize * 1.1);
-                    packetSize = (int) (packetSize * 2.2);
+                    packetSize = (int) (packetSize * 2.5);
                     break;
 
                 case TimeoutScenario.SendKernel:
                     packetSize = this.MaxSendSize + 20;
                     break;
+
+                case TimeoutScenario.Maximum:
+                    return 0xFF * 4; 
 
                 default:
                     throw new NotImplementedException("Unknown timeout scenario " + scenario);
